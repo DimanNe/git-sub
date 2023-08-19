@@ -170,56 +170,60 @@ function impl_git::submodule_callback::status
    argparse --ignore-unknown "parent_repo=" "submod_label=" "submod_rel_path=" "branch=" "indent=" "root_repo=" -- $argv || return
    set submod_path_rel_root (realpath --relative-to=$_flag_root_repo $_flag_parent_repo/$_flag_submod_rel_path)
    # Support below the format of git status: https://git-scm.com/docs/git-status#_short_format
-   git status --porcelain --ignore-submodules=all | awk_with_colours                                                        \
-      -v header=$_flag_indent""(set_color -o bryellow)"$submod_path_rel_root"(set_color normal)                             \
-      -v submod_path_rel_root="$submod_path_rel_root"                                                                       \
-      -v indent=$_flag_indent"   "                                                              '                           \
-      BEGIN {                                                                                                               \
-      }                                                                                                                     \
-      {                                                                                                                     \
-         if(NR == 1) print header;                                                                                          \
-         first_char = substr($0, 1, 1);                                                                                     \
-         if(first_char ~ /^[MADRT]$/) {                                                                                     \
-            action = (first_char == "M" ? "modified" : (first_char == "A" ? "added" : "other"));                            \
-            staged[action, $2];                                                                                             \
-         }                                                                                                                  \
-         second_char = substr($0, 2, 1);                                                                                    \
-         if(second_char ~ /^[MTD]$/) {                                                                                      \
-            action = "modified";                                                                                            \
-            unstaged[action, $NF];                                                                                          \
-         }                                                                                                                  \
-         if($1 == "??") {                                                                                                   \
-            untracked[$2];                                                                                                  \
-         }                                                                                                                  \
-      }                                                                                                                     \
-      END {                                                                                                                 \
-         above_printed = 0;                                                                                                 \
-         if(length(staged)) {                                                                                               \
-             if(above_printed) printf "\n";                                                                                 \
-             print indent "Changes to be committed:";                                                                       \
-             above_printed = 1;                                                                                             \
-             for(status_file_pair in staged) {                                                                              \
-               split(status_file_pair, status_file, SUBSEP);                                                                \
-               print indent "   " Green status_file[1]":   " Gray submod_path_rel_root "/" BGreen status_file[2] Color_Off; \
-             }                                                                                                              \
-         }                                                                                                                  \
-         if (length(unstaged)) {                                                                                            \
-            if(above_printed) printf "\n";                                                                                  \
-            print indent "Changes not staged for commit:";                                                                  \
-            above_printed = 1;                                                                                              \
-            for(status_file_pair in unstaged) {                                                                             \
-               split(status_file_pair, status_file, SUBSEP);                                                                \
-               print indent "   " Red status_file[1]":   " Gray submod_path_rel_root "/" BRed status_file[2] Color_Off;     \
-            }                                                                                                               \
-         }                                                                                                                  \
-         if (length(untracked)) {                                                                                           \
-            if(above_printed) printf "\n";                                                                                  \
-            print indent "Untracked files:";                                                                                \
-            above_printed = 1;                                                                                              \
-            for(file in untracked) print indent "   " Gray submod_path_rel_root "/" Red file Color_Off;                     \
-         }                                                                                                                  \
-         if(NR >= 1) print "\n";                                                                                            \
-      }                                                                                                                     \
+   git status --porcelain --ignore-submodules=all | awk_with_colours                                                    \
+      -v header=$_flag_indent""(set_color -o bryellow)"$submod_path_rel_root"(set_color normal)                         \
+      -v submod_path_rel_root="$submod_path_rel_root"                                                                   \
+      -v indent=$_flag_indent"   " '                                                                                    \
+      BEGIN {                                                                                                           \
+      }                                                                                                                 \
+      {                                                                                                                 \
+         if(NR == 1) print header;                                                                                      \
+         first_char = substr($0, 1, 1);                                                                                 \
+         second_char = substr($0, 2, 1);                                                                                \
+         the_rest = substr($0, 4);                                                                                      \
+         if(first_char ~ /^[MADRT]$/) {                                                                                 \
+            if(first_char == "M")      staged["modified:   ", the_rest];                                                \
+            else if(first_char == "A") staged["added:      ", the_rest];                                                \
+            else if(first_char == "D") staged["deleted:    ", the_rest];                                                \
+            else if(first_char == "R") staged["renamed:    ", the_rest];                                                \
+            else                       staged["other:      ", the_rest];                                                \
+         }                                                                                                              \
+         if(second_char ~ /^[MTD]$/) {                                                                                  \
+            action = "modified";                                                                                        \
+            unstaged[action, the_rest];                                                                                 \
+         }                                                                                                              \
+         if($1 == "??") {                                                                                               \
+            untracked[the_rest];                                                                                        \
+         }                                                                                                              \
+      }                                                                                                                 \
+      END {                                                                                                             \
+         above_printed = 0;                                                                                             \
+         if(length(staged)) {                                                                                           \
+             if(above_printed) printf "\n";                                                                             \
+             print indent "Changes to be committed:";                                                                   \
+             above_printed = 1;                                                                                         \
+             for(status_file_pair in staged) {                                                                          \
+               split(status_file_pair, status_file, SUBSEP);                                                            \
+               print indent "   " Green status_file[1] Gray submod_path_rel_root "/" Green status_file[2] Color_Off;    \
+             }                                                                                                          \
+         }                                                                                                              \
+         if (length(unstaged)) {                                                                                        \
+            if(above_printed) printf "\n";                                                                              \
+            print indent "Changes not staged for commit:";                                                              \
+            above_printed = 1;                                                                                          \
+            for(status_file_pair in unstaged) {                                                                         \
+               split(status_file_pair, status_file, SUBSEP);                                                            \
+               print indent "   " Red status_file[1]":   " Gray submod_path_rel_root "/" BRed status_file[2] Color_Off; \
+            }                                                                                                           \
+         }                                                                                                              \
+         if (length(untracked)) {                                                                                       \
+            if(above_printed) printf "\n";                                                                              \
+            print indent "Untracked files:";                                                                            \
+            above_printed = 1;                                                                                          \
+            for(file in untracked) print indent "   " Gray submod_path_rel_root "/" Red file Color_Off;                 \
+         }                                                                                                              \
+         if(NR >= 1) print "\n";                                                                                        \
+      }                                                                                                                 \
    '
 end
 function impl_git::status_for_each_submodule
@@ -235,6 +239,9 @@ end
 # Git add
 
 function impl_git::add_file --argument-names full_path
+   # Unlike vanilla git add, it accepts full path (even if there are submodules), cd's to appropriate submodule
+   # and invokes git add
+
    set current_dir (realpath (dirname $full_path))
 
    while not test -f "$current_dir/.git" -o -d "$current_dir/.git" -o "$current_dir" != "/"
