@@ -118,12 +118,12 @@ function impl_git::exec_for_each_submodule_dfs_helper
       # echo "$_flag_indent Parent repo: $_flag_repo_path: label: $label, path_in_parent: $path_in_parent" >> /dev/stderr
       pushd $_flag_repo_path/$path_in_parent
       $_flag_callback --parent_repo $_flag_repo_path  \
-                --submod_label      $label            \
-                --submod_rel_path   $path_in_parent   \
-                 --branch          "$branch"          \
-                 --indent          "$_flag_indent"    \
-                 --root_repo        $_flag_root_repo  \
-                  $argv
+                      --submod_label      $label            \
+                      --submod_rel_path   $path_in_parent   \
+                      --branch          "$branch"          \
+                      --indent          "$_flag_indent"    \
+                      --root_repo        $_flag_root_repo  \
+                      $argv
       popd
    end
 end
@@ -139,7 +139,7 @@ function impl_git::exec_for_each_submodule
    $_flag_callback --parent_repo $_flag_repo_path                              \
                                  --submod_label    ""                          \
                                  --submod_rel_path "."                         \
-                                 --branch          (git branch --show-current) \
+                                 --branch          ""                          \
                                  --indent          ""                          \
                                  --root_repo       $_flag_repo_path            \
                                  $argv
@@ -153,10 +153,17 @@ end
 
 function impl_git::submodule_callback::print --argument-names parent_repo_path label path branch indent
    argparse --ignore-unknown "parent_repo=" "submod_label=" "submod_rel_path=" "branch=" "indent=" "root_repo=" -- $argv || return
-   # echo $indent"Parent repo: $parent_repo_path: label: $label, path: $path"
+   set parent_path_rel_root (realpath --relative-to=$_flag_root_repo $_flag_parent_repo)
+
+   # Below is ugly: If git branch does not produce anything actual_branch will not be set to anything at all
+   # the variable does not exist in this case, which interferes with echo below, hence the workaround:
+   set -l actual_branch (git branch --show-current; echo "" | string collect)[1]
+
+   echo -e $_flag_indent$Gray$parent_path_rel_root/$BYellow$_flag_submod_rel_path$Color_Off: \
+           $Gray"branch: \""$Color_Off$actual_branch$Gray"\", label: \""$Color_Off$_flag_submod_label"\""
 end
-function impl_git::print_for_each_submodule
-   impl_git::exec_for_each_submodule --repo_path (impl_git::get_root_repo_path)     \
+function impl_git::print_submodules
+   impl_git::exec_for_each_submodule --repo_path  (impl_git::get_root_repo_path)    \
                                      --indent ""                                    \
                                      --callback impl_git::submodule_callback::print
 end
@@ -169,9 +176,17 @@ end
 function impl_git::submodule_callback::status
    argparse --ignore-unknown "parent_repo=" "submod_label=" "submod_rel_path=" "branch=" "indent=" "root_repo=" -- $argv || return
    set submod_path_rel_root (realpath --relative-to=$_flag_root_repo $_flag_parent_repo/$_flag_submod_rel_path)
+
+   # Below is ugly: If git branch does not produce anything actual_branch will not be set to anything at all
+   # the variable does not exist in this case, which interferes with echo below, hence the workaround:
+   set -l actual_branch (git branch --show-current; echo "" | string collect)[1]
+
+   # header corresponds to: man/pub-docs branch: "master"
+   set -l header $_flag_indent""(set_color -o bryellow)"$submod_path_rel_root"(set_color normal)" "$Gray"branch: \""$Color_Off$actual_branch$Gray"\""$Color_Off
+
    # Support below the format of git status: https://git-scm.com/docs/git-status#_short_format
-   git status --porcelain --ignore-submodules=all | awk_with_colours                                                    \
-      -v header=$_flag_indent""(set_color -o bryellow)"$submod_path_rel_root"(set_color normal)                         \
+   git status --porcelain --ignore-submodules=dirty | awk_with_colours                                                    \
+      -v header=$header                         \
       -v submod_path_rel_root="$submod_path_rel_root"                                                                   \
       -v indent=$_flag_indent"   " '                                                                                    \
       BEGIN {                                                                                                           \
@@ -239,9 +254,6 @@ end
 # Git add
 
 function impl_git::add_file --argument-names full_path
-   # Unlike vanilla git add, it accepts full path (even if there are submodules), cd's to appropriate submodule
-   # and invokes git add
-
    set current_dir (realpath (dirname $full_path))
 
    while not test -f "$current_dir/.git" -o -d "$current_dir/.git" -o "$current_dir" != "/"
@@ -258,6 +270,10 @@ function impl_git::add_file --argument-names full_path
    popd
 end
 function impl_git::add_files
+   # Description:
+   # Unlike vanilla git add, it accepts full path (even if there are submodules), cd's to appropriate submodule
+   # and invokes git add
+
    for full_path in $argv
       impl_git::add_file $full_path
    end
@@ -304,7 +320,12 @@ function impl_git::submodule_callback::commmit
    end
 end
 
+
 function impl_git::git_commit
+   # Description:
+   # Goes from leafs to root and for each submodule, adds its submodules that have new commits, and then
+   # commits (whatever is in staging area: can be only the submodule and can only be new files or can be both)
+
    impl_git::exec_for_each_submodule --repo_path (impl_git::get_root_repo_path)       \
                                      --indent ""                                      \
                                      --callback impl_git::submodule_callback::commmit \
@@ -314,10 +335,109 @@ end
 
 
 # ============================================================================================================
+# Git checkout branches (get rid of detached HEAD)
+
+
+function impl_git::submodule_callback::checkout_branches --argument-names parent_repo_path label path branch indent
+   argparse --ignore-unknown "parent_repo=" "submod_label=" "submod_rel_path=" "branch=" "indent=" "root_repo=" -- $argv || return
+   if test -n "$_flag_branch"
+      impl_git::MaybeRun git checkout $_flag_branch
+   end
+end
+
+
+function impl_git::checkout_branches
+   # Description:
+   # Gets rid of "Detached HEAD" state where possible.
+   # Takes an optional list of **submodule** paths. If the list is empty, uses the root repo and
+   # checks out the branch that is recorded in .gitmodules (this is what was used when you added submodule via:
+   # git submodule add -b master ...asdf.git ./asdf)
+
+   if test (count $argv) -eq 0
+      set argv (impl_git::get_root_repo_path)
+   end
+   for submod_path in $argv
+      impl_git::exec_for_each_submodule --repo_path  $submod_path                                   \
+                                        --indent ""                                                 \
+                                        --callback impl_git::submodule_callback::checkout_branches
+   end
+end
+
+
+
+
+
+
+# ============================================================================================================
+# Make children state consistent with what is recorded in parents
+
+function impl_git::impose_parents_will
+   # Description:
+   # Makes state of submodules consistent with what is expected by parents.
+   # -f will use "git reset hard" before checking out parents state, so it is higly destructive
+   # -p will also fetch (potentially updated) URLs of submodules from upstream
+   # -d force dry-run
+   # the rest is interpreted as a list of paths of **submodules** to "fix"
+
+   argparse --ignore-unknown "f/force" "p/pull" "d/dry_run" -- $argv || return
+   set -l GIT_SUB_DRY_RUN_backup "$GIT_SUB_DRY_RUN"
+   if set -q _flag_dry_run
+      set -x GIT_SUB_DRY_RUN "1"
+   end
+
+   for submod_path in $argv
+      set -l parent_path (dirname $submod_path)
+      set -l submod_rel_path (basename $submod_path)
+      pushd $parent_path
+      if set -q _flag_force
+         pushd $submod_path
+         impl_git::MaybeRun git submodule foreach --recursive git reset --hard # reset nested submodules
+         impl_git::MaybeRun git reset --hard # reset this submodule
+         popd
+      end
+      if set -q _flag_pull
+         impl_git::MaybeRun git pull
+         impl_git::MaybeRun git submodule sync --recursive
+      end
+      impl_git::MaybeRun git submodule update --init --recursive $submod_rel_path
+      popd
+   end
+
+   if set -q _flag_dry_run
+      set -x GIT_SUB_DRY_RUN "$GIT_SUB_DRY_RUN_backup"
+   end
+end
+
+
+
+# ============================================================================================================
+# Git pull
+
+function impl_git::git_pull
+   # Description:
+   # Takes an optional list of **submodule** paths. If the list is empty, uses the root repo and performs
+   # "git pull && git submodule sync --recursive && git submodule update --init --recursive"
+
+   if test (count $argv) -eq 0
+      set argv (impl_git::get_root_repo_path)
+   end
+   for submod_path in $argv
+      pushd $submod_path
+      git pull && git submodule sync --recursive && git submodule update --init --recursive
+      popd
+   end
+end
+
+
+
+# ============================================================================================================
 # Git diff
 
 
 function impl_git::git_diff --argument-names submod_path
+   # Description:
+   # Takes any path (presumably submodule's), cd's into it, and calls git diff (and then returns to prev dir)
+
    pushd $submod_path
    git diff $argv[2..]
    popd
@@ -329,6 +449,9 @@ end
 # Git log
 
 function impl_git::git_log --argument-names submod_path
+   # Description:
+   # Takes any path (presumably submodule's), cd's into it, and calls git log (and then returns to prev dir)
+
    pushd $submod_path
    git log $argv[2..]
    popd
@@ -358,6 +481,9 @@ function impl_git::restore_file
 end
 
 function impl_git::git_restore
+   # Description:
+   # Takes any path of a file, finds its submodule, and calls git restore ... (and then returns to prev dir)
+
    argparse --ignore-unknown "staged" -- $argv || return
    for full_path in $argv
       impl_git::restore_file $_flag_staged --full_path $full_path
