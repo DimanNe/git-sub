@@ -154,13 +154,42 @@ end
 function impl_git::submodule_callback::print --argument-names parent_repo_path label path branch indent
    argparse --ignore-unknown "parent_repo=" "submod_label=" "submod_rel_path=" "branch=" "indent=" "root_repo=" -- $argv || return
    set parent_path_rel_root (realpath --relative-to=$_flag_root_repo $_flag_parent_repo)
+   if test "$parent_path_rel_root" = "."
+      set parent_path_rel_root ""
+   else
+      set parent_path_rel_root $parent_path_rel_root/
+   end
 
    # Below is ugly: If git branch does not produce anything actual_branch will not be set to anything at all
    # the variable does not exist in this case, which interferes with echo below, hence the workaround:
-   set -l actual_branch (git branch --show-current; echo "" | string collect)[1]
+   if test "$_flag_submod_rel_path" != "."
+      set -l actual_branch (git branch --show-current; echo "" | string collect)[1]
+      set -l actual_HEAD (string sub --end 15 -- (git rev-parse HEAD))
+      pushd $_flag_parent_repo
+      set -l expected_HEAD (string sub --end 15 -- (git rev-parse :$_flag_submod_rel_path))
+      popd
 
-   echo -e $_flag_indent$Gray$parent_path_rel_root/$BYellow$_flag_submod_rel_path$Color_Off: \
-           $Gray"branch: \""$Color_Off$actual_branch$Gray"\", label: \""$Color_Off$_flag_submod_label"\""
+      set -l expected_ts_msg (string sub --end 40 -- (git show -s --date=format:"%H:%M %d.%m.%Y" --format="%cd %s"  $expected_HEAD))
+      set -l actual_ts_msg (string sub --end 40 -- (git show -s --date=format:"%H:%M %d.%m.%Y" --format="%cd %s"  $actual_HEAD))
+
+      if test "$actual_branch" = "$_flag_branch"
+         set branch_info $Gray"branches: $BGray$actual_branch$Color_Off"
+      else
+         set branch_info $Gray"branches: "$Color_Off$actual_branch$Red" != "$Color_Off$_flag_branch
+      end
+
+      if test "$actual_HEAD" = "$expected_HEAD"
+         set head_info $Gray"HEADs: $BGray$actual_HEAD ($actual_ts_msg)"$Color_Off
+      else
+         set head_info $Gray"HEADs: $Color_Off$actual_HEAD ($actual_ts_msg)$Red != $Color_Off$expected_HEAD ($expected_ts_msg)"
+      end
+   else # There is no branch info / head info for the root repo
+      set branch_info ""
+      set head_info ""
+   end
+
+   echo -e $_flag_indent$Gray$parent_path_rel_root$BYellow$_flag_submod_rel_path$Color_Off: \
+           $branch_info", "$head_info$Gray # ", label: \""$Color_Off$_flag_submod_label"\""
 end
 function impl_git::print_submodules
    impl_git::exec_for_each_submodule --repo_path  (impl_git::get_root_repo_path)    \
@@ -421,11 +450,13 @@ function impl_git::git_pull
    if test (count $argv) -eq 0
       set argv (impl_git::get_root_repo_path)
    end
+   # set fish_trace 1
    for submod_path in $argv
       pushd $submod_path
-      git pull && git submodule sync --recursive && git submodule update --init --recursive
+      git pull && git submodule sync --recursive && git submodule update --init --recursive #  --merge
       popd
    end
+   # set -e fish_trace
 end
 
 
