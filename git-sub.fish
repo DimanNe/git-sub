@@ -106,9 +106,9 @@ function impl_git::render_repo_branches_HEADs
    argparse --ignore-unknown "parent_repo=" "submod_label=" "submod_rel_path=" "branch=" "indent=" "root_repo=" -- $argv || return
    set parent_path_rel_root (realpath --relative-to=$_flag_root_repo $_flag_parent_repo)
    if test "$parent_path_rel_root" = "."
-      set parent_path_rel_root ""
+      set parent_path_rel_root "" # Do not use ./ in front of modules
    else
-      set parent_path_rel_root $parent_path_rel_root/
+      set parent_path_rel_root $parent_path_rel_root/ # use prefix path only if it is non-trivial
    end
 
    if test "$_flag_submod_rel_path" != "." # This is NOT root repo
@@ -134,12 +134,10 @@ function impl_git::render_repo_branches_HEADs
       else
          set head_info $Gray"HEADs: $Color_Off$actual_HEAD ($actual_ts_msg)$BRed != $Color_Off$expected_HEAD ($expected_ts_msg)"
       end
+      echo -e $_flag_indent$Gray$parent_path_rel_root$BYellow$_flag_submod_rel_path$Color_Off: $branch_info", "$head_info
    else # There is no branch info / head info for the root repo
-      set branch_info ""
-      set head_info ""
+      echo -e $_flag_indent$BYellow"."$Color_Off
    end
-
-   echo -e $_flag_indent$Gray$parent_path_rel_root$BYellow$_flag_submod_rel_path$Color_Off: $branch_info", "$head_info
 end
 
 
@@ -221,6 +219,15 @@ end
 function impl_git::submodule_callback::status
    argparse --ignore-unknown "parent_repo=" "submod_label=" "submod_rel_path=" "branch=" "indent=" "root_repo=" -- $argv || return
    set submod_path_rel_root (realpath --relative-to=$_flag_root_repo $_flag_parent_repo/$_flag_submod_rel_path)
+
+   if test "$submod_path_rel_root" = "."
+      set submod_path_rel_root "" # Do not use ./ in front of modules
+   else
+      set submod_path_rel_root $submod_path_rel_root/ # use prefix path only if it is non-trivial
+   end
+
+
+
    set -l header (impl_git::render_repo_branches_HEADs --parent_repo     $_flag_parent_repo     \
                                                        --submod_label    $_flag_submod_label    \
                                                        --submod_rel_path $_flag_submod_rel_path \
@@ -262,7 +269,7 @@ function impl_git::submodule_callback::status
              above_printed = 1;                                                                                         \
              for(status_file_pair in staged) {                                                                          \
                split(status_file_pair, status_file, SUBSEP);                                                            \
-               print indent "   " Green status_file[1] Gray submod_path_rel_root "/" Green status_file[2] Color_Off;    \
+               print indent "   " Green status_file[1] Gray submod_path_rel_root Green status_file[2] Color_Off;    \
              }                                                                                                          \
          }                                                                                                              \
          if (length(unstaged)) {                                                                                        \
@@ -271,14 +278,14 @@ function impl_git::submodule_callback::status
             above_printed = 1;                                                                                          \
             for(status_file_pair in unstaged) {                                                                         \
                split(status_file_pair, status_file, SUBSEP);                                                            \
-               print indent "   " Red status_file[1]":   " Gray submod_path_rel_root "/" BRed status_file[2] Color_Off; \
+               print indent "   " Red status_file[1]":   " Gray submod_path_rel_root BRed status_file[2] Color_Off; \
             }                                                                                                           \
          }                                                                                                              \
          if (length(untracked)) {                                                                                       \
             if(above_printed) printf "\n";                                                                              \
             print indent "Untracked files:";                                                                            \
             above_printed = 1;                                                                                          \
-            for(file in untracked) print indent "   " Gray submod_path_rel_root "/" Red file Color_Off;                 \
+            for(file in untracked) print indent "   " Gray submod_path_rel_root Red file Color_Off;                 \
          }                                                                                                              \
          if(NR >= 1) print "\n";                                                                                        \
       }                                                                                                                 \
