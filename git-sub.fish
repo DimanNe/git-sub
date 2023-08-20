@@ -9,65 +9,69 @@ end
 # Helpers
 
 # Reset
-set Color_Off '\033[0m'       # Text Reset
+set Color_Off   '\033[0m'           # Text Reset
 # Regular Colors
-set Gray      '\033[0;90m'    # Gray
-set Black     '\033[0;30m'    # Black
-set Red       '\033[0;31m'    # Red
-set Green     '\033[0;32m'    # Green
-set Yellow    '\033[0;33m'    # Yellow
-set Blue      '\033[0;34m'    # Blue
-set Purple    '\033[0;35m'    # Purple
-set Cyan      '\033[0;36m'    # Cyan
-set White     '\033[0;37m'    # White
+set BrightGray  '\033[38;5;248m'
+set Gray        '\033[0;90m'        # Gray
+set Black       '\033[0;30m'        # Black
+set Red         '\033[0;31m'        # Red
+set Green       '\033[0;32m'        # Green
+set Yellow      '\033[0;33m'        # Yellow
+set Blue        '\033[0;34m'        # Blue
+set Purple      '\033[0;35m'        # Purple
+set Cyan        '\033[0;36m'        # Cyan
+set White       '\033[0;37m'        # White
 # Bold
-set BGray     '\033[1;30m'
-set BBlack    '\033[1;30m'    # Black
-set BRed      '\033[1;31m'    # Red
-set BGreen    '\033[1;32m'    # Green
-set BYellow   '\033[1;33m'    # Yellow
-set BBlue     '\033[1;34m'    # Blue
-set BPurple   '\033[1;35m'    # Purple
-set BCyan     '\033[1;36m'    # Cyan
-set BWhite    '\033[1;37m'    # White
+set BBrightGray '\033[1;38;5;248m'
+set BGray       '\033[1;30m'
+set BBlack      '\033[1;30m'        # Black
+set BRed        '\033[1;31m'        # Red
+set BGreen      '\033[1;32m'        # Green
+set BYellow     '\033[1;33m'        # Yellow
+set BBlue       '\033[1;34m'        # Blue
+set BPurple     '\033[1;35m'        # Purple
+set BCyan       '\033[1;36m'        # Cyan
+set BWhite      '\033[1;37m'        # White
 # Underline
-set UBlack    '\033[4;30m'    # Black
-set URed      '\033[4;31m'    # Red
-set UGreen    '\033[4;32m'    # Green
-set UYellow   '\033[4;33m'    # Yellow
-set UBlue     '\033[4;34m'    # Blue
-set UPurple   '\033[4;35m'    # Purple
-set UCyan     '\033[4;36m'    # Cyan
-set UWhite    '\033[4;37m'    # White
+set UBlack      '\033[4;30m'        # Black
+set URed        '\033[4;31m'        # Red
+set UGreen      '\033[4;32m'        # Green
+set UYellow     '\033[4;33m'        # Yellow
+set UBlue       '\033[4;34m'        # Blue
+set UPurple     '\033[4;35m'        # Purple
+set UCyan       '\033[4;36m'        # Cyan
+set UWhite      '\033[4;37m'        # White
 
 function awk_with_colours
-   awk                          \
-      -v Color_Off="$Color_Off" \
-      -v Gray="$Gray"           \
-      -v Black="$Black"         \
-      -v Red="$Red"             \
-      -v Green="$Green"         \
-      -v Yellow="$Yellow"       \
-      -v Blue="$Blue"           \
-      -v Purple="$Purple"       \
-      -v Cyan="$Cyan"           \
-      -v White="$White"         \
-      -v BBlack="$BBlack"       \
-      -v BRed="$BRed"           \
-      -v BGreen="$BGreen"       \
-      -v BYellow="$BYellow"     \
-      -v BBlue="$BBlue"         \
-      -v BPurple="$BPurple"     \
-      -v BCyan="$BCyan"         \
-      -v BWhite="$BWhite"       \
-      -v UBlack="$UBlack"       \
-      -v URed="$URed"           \
-      -v UGreen="$UGreen"       \
-      -v UYellow="$UYellow"     \
-      -v UBlue="$UBlue"         \
-      -v UPurple="$UPurple"     \
-      -v UCyan="$UCyan"         \
-      -v UWhite="$UWhite"       \
+   awk                              \
+      -v Color_Off="$Color_Off"     \
+      -v Gray="$Gray"               \
+      -v BrightGray="$BrightGray"   \
+      -v Black="$Black"             \
+      -v Red="$Red"                 \
+      -v Green="$Green"             \
+      -v Yellow="$Yellow"           \
+      -v Blue="$Blue"               \
+      -v Purple="$Purple"           \
+      -v Cyan="$Cyan"               \
+      -v White="$White"             \
+      -v BBlack="$BBlack"           \
+      -v BBrightGray="$BBrightGray" \
+      -v BRed="$BRed"               \
+      -v BGreen="$BGreen"           \
+      -v BYellow="$BYellow"         \
+      -v BBlue="$BBlue"             \
+      -v BPurple="$BPurple"         \
+      -v BCyan="$BCyan"             \
+      -v BWhite="$BWhite"           \
+      -v UBlack="$UBlack"           \
+      -v URed="$URed"               \
+      -v UGreen="$UGreen"           \
+      -v UYellow="$UYellow"         \
+      -v UBlue="$UBlue"             \
+      -v UPurple="$UPurple"         \
+      -v UCyan="$UCyan"             \
+      -v UWhite="$UWhite"           \
       $argv
 end
 
@@ -88,6 +92,55 @@ function impl_git::get_root_repo_path
    echo $current_dir
 end
 
+
+function impl_git::render_repo_branches_HEADs
+   # Description:
+   # The goal is to produce something like this, for the given parameters:
+   # in case of same branches and SHAs:
+   # contrib/crc32c/crc32c/third_party/googletest: branches: , HEADs: 18f8200e3079b0e (22:11 11.12.2020 Googletest export)
+   # or, in case of branch mismatch (actual branch != recorded in .gitmodules branch):
+   # contrib/benchmark/benchmark: branches:  != main, HEADs: 2d054b683f293db (15:26 11.08.2021 Merge branch 'main' of )
+   # or, in case of SHA mismatch (actual SHA != expected by parent repo SHA):
+   # contrib/benchmark/benchmark: branches: main, HEADs: 885e9f71d677f57 (15:41 17.08.2023 benchmark.cc: Fix bench) != 2d054b683f293db (15:26 11.08.2021 Merge branch 'main' of )
+
+   argparse --ignore-unknown "parent_repo=" "submod_label=" "submod_rel_path=" "branch=" "indent=" "root_repo=" -- $argv || return
+   set parent_path_rel_root (realpath --relative-to=$_flag_root_repo $_flag_parent_repo)
+   if test "$parent_path_rel_root" = "."
+      set parent_path_rel_root ""
+   else
+      set parent_path_rel_root $parent_path_rel_root/
+   end
+
+   if test "$_flag_submod_rel_path" != "." # This is NOT root repo
+      # Below is ugly: If git branch does not produce anything actual_branch will not be set to anything at all
+      # the variable does not exist in this case, which interferes with echo below, hence the workaround:
+      set -l actual_branch (git branch --show-current; echo "" | string collect)[1]
+      set -l actual_HEAD (string sub --end 15 -- (git rev-parse HEAD))
+      pushd $_flag_parent_repo
+      set -l expected_HEAD (string sub --end 15 -- (git rev-parse :$_flag_submod_rel_path))
+      popd
+
+      set -l expected_ts_msg (string sub --end 40 -- (git show -s --date=format:"%H:%M %d.%m.%Y" --no-show-signature --format="%cd %s"  $expected_HEAD))
+      set -l actual_ts_msg (string sub --end 40 -- (git show -s --date=format:"%H:%M %d.%m.%Y" --no-show-signature --format="%cd %s"  $actual_HEAD))
+
+      if test "$actual_branch" = "$_flag_branch"
+         set branch_info $Gray"branches: $BBrightGray$actual_branch$Color_Off"
+      else
+         set branch_info $Gray"branches: "$Color_Off$actual_branch$BRed" != "$Color_Off$_flag_branch
+      end
+
+      if test "$actual_HEAD" = "$expected_HEAD"
+         set head_info $Gray"HEADs: $BBrightGray$actual_HEAD ($actual_ts_msg)"$Color_Off
+      else
+         set head_info $Gray"HEADs: $Color_Off$actual_HEAD ($actual_ts_msg)$BRed != $Color_Off$expected_HEAD ($expected_ts_msg)"
+      end
+   else # There is no branch info / head info for the root repo
+      set branch_info ""
+      set head_info ""
+   end
+
+   echo -e $_flag_indent$Gray$parent_path_rel_root$BYellow$_flag_submod_rel_path$Color_Off: $branch_info", "$head_info
+end
 
 
 # ============================================================================================================
@@ -152,44 +205,7 @@ end
 # Debug / printing
 
 function impl_git::submodule_callback::print --argument-names parent_repo_path label path branch indent
-   argparse --ignore-unknown "parent_repo=" "submod_label=" "submod_rel_path=" "branch=" "indent=" "root_repo=" -- $argv || return
-   set parent_path_rel_root (realpath --relative-to=$_flag_root_repo $_flag_parent_repo)
-   if test "$parent_path_rel_root" = "."
-      set parent_path_rel_root ""
-   else
-      set parent_path_rel_root $parent_path_rel_root/
-   end
-
-   # Below is ugly: If git branch does not produce anything actual_branch will not be set to anything at all
-   # the variable does not exist in this case, which interferes with echo below, hence the workaround:
-   if test "$_flag_submod_rel_path" != "."
-      set -l actual_branch (git branch --show-current; echo "" | string collect)[1]
-      set -l actual_HEAD (string sub --end 15 -- (git rev-parse HEAD))
-      pushd $_flag_parent_repo
-      set -l expected_HEAD (string sub --end 15 -- (git rev-parse :$_flag_submod_rel_path))
-      popd
-
-      set -l expected_ts_msg (string sub --end 40 -- (git show -s --date=format:"%H:%M %d.%m.%Y" --format="%cd %s"  $expected_HEAD))
-      set -l actual_ts_msg (string sub --end 40 -- (git show -s --date=format:"%H:%M %d.%m.%Y" --format="%cd %s"  $actual_HEAD))
-
-      if test "$actual_branch" = "$_flag_branch"
-         set branch_info $Gray"branches: $BGray$actual_branch$Color_Off"
-      else
-         set branch_info $Gray"branches: "$Color_Off$actual_branch$Red" != "$Color_Off$_flag_branch
-      end
-
-      if test "$actual_HEAD" = "$expected_HEAD"
-         set head_info $Gray"HEADs: $BGray$actual_HEAD ($actual_ts_msg)"$Color_Off
-      else
-         set head_info $Gray"HEADs: $Color_Off$actual_HEAD ($actual_ts_msg)$Red != $Color_Off$expected_HEAD ($expected_ts_msg)"
-      end
-   else # There is no branch info / head info for the root repo
-      set branch_info ""
-      set head_info ""
-   end
-
-   echo -e $_flag_indent$Gray$parent_path_rel_root$BYellow$_flag_submod_rel_path$Color_Off: \
-           $branch_info", "$head_info$Gray # ", label: \""$Color_Off$_flag_submod_label"\""
+   impl_git::render_repo_branches_HEADs $argv
 end
 function impl_git::print_submodules
    impl_git::exec_for_each_submodule --repo_path  (impl_git::get_root_repo_path)    \
@@ -205,23 +221,20 @@ end
 function impl_git::submodule_callback::status
    argparse --ignore-unknown "parent_repo=" "submod_label=" "submod_rel_path=" "branch=" "indent=" "root_repo=" -- $argv || return
    set submod_path_rel_root (realpath --relative-to=$_flag_root_repo $_flag_parent_repo/$_flag_submod_rel_path)
-
-   # Below is ugly: If git branch does not produce anything actual_branch will not be set to anything at all
-   # the variable does not exist in this case, which interferes with echo below, hence the workaround:
-   set -l actual_branch (git branch --show-current; echo "" | string collect)[1]
-
-   # header corresponds to: man/pub-docs branch: "master"
-   set -l header $_flag_indent""(set_color -o bryellow)"$submod_path_rel_root"(set_color normal)" "$Gray"branch: \""$Color_Off$actual_branch$Gray"\""$Color_Off
+   set -l header (impl_git::render_repo_branches_HEADs --parent_repo     $_flag_parent_repo     \
+                                                       --submod_label    $_flag_submod_label    \
+                                                       --submod_rel_path $_flag_submod_rel_path \
+                                                       --branch          $_flag_branch          \
+                                                       --indent          $_flag_indent          \
+                                                       --root_repo       $_flag_root_repo)
 
    # Support below the format of git status: https://git-scm.com/docs/git-status#_short_format
-   git status --porcelain --ignore-submodules=dirty | awk_with_colours                                                    \
-      -v header=$header                         \
+   git status --porcelain --ignore-submodules=dirty | awk_with_colours                                                  \
+      -v header=$header                                                                                                 \
       -v submod_path_rel_root="$submod_path_rel_root"                                                                   \
       -v indent=$_flag_indent"   " '                                                                                    \
-      BEGIN {                                                                                                           \
-      }                                                                                                                 \
+      BEGIN { }                                                                                                         \
       {                                                                                                                 \
-         if(NR == 1) print header;                                                                                      \
          first_char = substr($0, 1, 1);                                                                                 \
          second_char = substr($0, 2, 1);                                                                                \
          the_rest = substr($0, 4);                                                                                      \
@@ -242,6 +255,7 @@ function impl_git::submodule_callback::status
       }                                                                                                                 \
       END {                                                                                                             \
          above_printed = 0;                                                                                             \
+         if(length(staged) || length(unstaged) || length(untracked) || header ~ /!=/) print header;                     \
          if(length(staged)) {                                                                                           \
              if(above_printed) printf "\n";                                                                             \
              print indent "Changes to be committed:";                                                                   \
