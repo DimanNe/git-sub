@@ -9,38 +9,38 @@ end
 # Helpers
 
 # Reset
-set Color_Off   '\033[0m'           # Text Reset
+set Color_Off   '\033[0m'
 # Regular Colors
+set Gray        '\033[0;90m'
 set BrightGray  '\033[38;5;248m'
-set Gray        '\033[0;90m'        # Gray
-set Black       '\033[0;30m'        # Black
-set Red         '\033[0;31m'        # Red
-set Green       '\033[0;32m'        # Green
-set Yellow      '\033[0;33m'        # Yellow
-set Blue        '\033[0;34m'        # Blue
-set Purple      '\033[0;35m'        # Purple
-set Cyan        '\033[0;36m'        # Cyan
-set White       '\033[0;37m'        # White
+set Black       '\033[0;30m'
+set Red         '\033[0;31m'
+set Green       '\033[0;32m'
+set Yellow      '\033[0;33m'
+set Blue        '\033[0;34m'
+set Purple      '\033[0;35m'
+set Cyan        '\033[0;36m'
+set White       '\033[0;37m'
 # Bold
+set BBlack      '\033[1;30m'
 set BBrightGray '\033[1;38;5;248m'
 set BGray       '\033[1;30m'
-set BBlack      '\033[1;30m'        # Black
-set BRed        '\033[1;31m'        # Red
-set BGreen      '\033[1;32m'        # Green
-set BYellow     '\033[1;33m'        # Yellow
-set BBlue       '\033[1;34m'        # Blue
-set BPurple     '\033[1;35m'        # Purple
-set BCyan       '\033[1;36m'        # Cyan
-set BWhite      '\033[1;37m'        # White
+set BRed        '\033[1;31m'
+set BGreen      '\033[1;32m'
+set BYellow     '\033[1;33m'
+set BBlue       '\033[1;34m'
+set BPurple     '\033[1;35m'
+set BCyan       '\033[1;36m'
+set BWhite      '\033[1;37m'
 # Underline
-set UBlack      '\033[4;30m'        # Black
-set URed        '\033[4;31m'        # Red
-set UGreen      '\033[4;32m'        # Green
-set UYellow     '\033[4;33m'        # Yellow
-set UBlue       '\033[4;34m'        # Blue
-set UPurple     '\033[4;35m'        # Purple
-set UCyan       '\033[4;36m'        # Cyan
-set UWhite      '\033[4;37m'        # White
+set UBlack      '\033[4;30m'
+set URed        '\033[4;31m'
+set UGreen      '\033[4;32m'
+set UYellow     '\033[4;33m'
+set UBlue       '\033[4;34m'
+set UPurple     '\033[4;35m'
+set UCyan       '\033[4;36m'
+set UWhite      '\033[4;37m'
 
 function awk_with_colours
    awk                              \
@@ -57,6 +57,7 @@ function awk_with_colours
       -v White="$White"             \
       -v BBlack="$BBlack"           \
       -v BBrightGray="$BBrightGray" \
+      -v BGray="$BGray" \
       -v BRed="$BRed"               \
       -v BGreen="$BGreen"           \
       -v BYellow="$BYellow"         \
@@ -225,7 +226,6 @@ function impl_git::submodule_callback::status
    else
       set submod_path_rel_root $submod_path_rel_root/ # use prefix path only if it is non-trivial
    end
-
 
 
    set -l header (impl_git::render_repo_branches_HEADs --parent_repo     $_flag_parent_repo     \
