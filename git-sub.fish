@@ -57,7 +57,7 @@ function awk_with_colours
       -v White="$White"             \
       -v BBlack="$BBlack"           \
       -v BBrightGray="$BBrightGray" \
-      -v BGray="$BGray" \
+      -v BGray="$BGray"             \
       -v BRed="$BRed"               \
       -v BGreen="$BGreen"           \
       -v BYellow="$BYellow"         \
@@ -105,6 +105,7 @@ function impl_git::render_repo_branches_HEADs
    # contrib/benchmark/benchmark: branches: main, HEADs: 885e9f71d677f57 (15:41 17.08.2023 benchmark.cc: Fix bench) != 2d054b683f293db (15:26 11.08.2021 Merge branch 'main' of )
 
    argparse --ignore-unknown "parent_repo=" "submod_label=" "submod_rel_path=" "branch=" "indent=" "root_repo=" -- $argv || return
+   set -l this_submod_path $_flag_parent_repo/$_flag_submod_rel_path
    set parent_path_rel_root (realpath --relative-to=$_flag_root_repo $_flag_parent_repo)
    if test "$parent_path_rel_root" = "."
       set parent_path_rel_root "" # Do not use ./ in front of modules
@@ -116,26 +117,34 @@ function impl_git::render_repo_branches_HEADs
       # Below is ugly: If git branch does not produce anything actual_branch will not be set to anything at all
       # the variable does not exist in this case, which interferes with echo below, hence the workaround:
       set -l actual_branch (git branch --show-current; echo "" | string collect)[1]
-      set -l actual_HEAD (string sub --end 15 -- (git rev-parse HEAD))
+      set actual_HEAD (string sub --end 15 -- (git rev-parse HEAD))
       pushd $_flag_parent_repo
       set -l expected_HEAD (string sub --end 15 -- (git rev-parse :$_flag_submod_rel_path))
       popd
 
-      set -l expected_ts_msg (string sub --end 40 -- (git show -s --date=format:"%H:%M %d.%m.%Y" --no-show-signature --format="%cd %s"  $expected_HEAD))
-      set -l actual_ts_msg (string sub --end 40 -- (git show -s --date=format:"%H:%M %d.%m.%Y" --no-show-signature --format="%cd %s"  $actual_HEAD))
+      # If submodule is blacklisted, the parent can be aware of a commit that does not exist in submodule, hence redirection to /dev/null:
+      set expected_ts_msg (string sub --end 35 -- (git show -s --date=format:"%H:%M %d.%m.%Y" --no-show-signature --format="%cd %s"  $expected_HEAD 2>/dev/null))
+      set actual_ts_msg (string sub --end 35 -- (git show -s --date=format:"%H:%M %d.%m.%Y" --no-show-signature --format="%cd %s"  $actual_HEAD))
+
+      # Handle the case if there is no such submodule (for example, it was blacklisted via git config submodule.XXX.update none)
+      if not test -f "$this_submod_path/.git" -o -d "$this_submod_path/.git"
+         set actual_HEAD "NO SUCH MODULE"
+         set actual_ts_msg ""
+      end
+
 
       if test "$actual_branch" = "$_flag_branch"
          set branch_info $Gray"branches: $BBrightGray$actual_branch$Color_Off"
       else
-         set branch_info $Gray"branches: "$Color_Off$actual_branch$BRed" != "$Color_Off$_flag_branch
+         set branch_info $Gray"branches: "$BWhite$actual_branch$BRed" != "$BWhite$_flag_branch$Color_Off
       end
 
       if test "$actual_HEAD" = "$expected_HEAD"
          set head_info $Gray"HEADs: $BBrightGray$actual_HEAD ($actual_ts_msg)"$Color_Off
       else
-         set head_info $Gray"HEADs: $Color_Off$actual_HEAD ($actual_ts_msg)$BRed != $Color_Off$expected_HEAD ($expected_ts_msg)"
+         set head_info $Gray"HEADs: $BWhite$actual_HEAD ($actual_ts_msg)$BRed != $BWhite$expected_HEAD ($expected_ts_msg)$Color_Off"
       end
-      echo -e $_flag_indent$Gray$parent_path_rel_root$BYellow$_flag_submod_rel_path$Color_Off: $branch_info", "$head_info
+      echo -e $_flag_indent$Gray$parent_path_rel_root$BYellow$_flag_submod_rel_path$Gray: $branch_info", "$head_info
    else # There is no branch info / head info for the root repo
       echo -e $_flag_indent$BYellow"."$Color_Off
    end
@@ -143,10 +152,10 @@ end
 
 
 # ============================================================================================================
-# Post-order DFS traversal
+# DFS traversal
 
 function impl_git::exec_for_each_submodule_dfs_helper
-   argparse --ignore-unknown "repo_path=" "indent=" "callback=" "root_repo=" -- $argv || return
+   argparse --ignore-unknown "repo_path=" "indent=" "callback=" "root_repo=" "order=" -- $argv || return
    set gitmodules_file $_flag_repo_path/.gitmodules
    if not test -f $gitmodules_file
       return
@@ -158,34 +167,51 @@ function impl_git::exec_for_each_submodule_dfs_helper
       set -l label_path     (string split " " -- $pair)
       set -l label          $label_path[1]
       set -l path_in_parent $label_path[2]
+      # branch Empty either if this is the root repo (see below), or if is not specified in .gitmodules:
       set -l branch         (git config --file $gitmodules_file submodule.$label.branch)
+
+
+      if test "$_flag_order" = "pre-order"
+         # echo "$_flag_indent Parent repo: $_flag_repo_path: label: $label, path_in_parent: $path_in_parent" >> /dev/stderr
+         pushd $_flag_repo_path/$path_in_parent
+         $_flag_callback --parent_repo $_flag_repo_path       \
+                        --submod_label     $label            \
+                        --submod_rel_path  $path_in_parent   \
+                        --branch          "$branch"          \
+                        --indent          "$_flag_indent"    \
+                        --root_repo        $_flag_root_repo  \
+                        $argv
+         popd
+      end
 
       impl_git::exec_for_each_submodule_dfs_helper --repo_path $_flag_repo_path/$path_in_parent \
                                                    --indent   "$_flag_indent     "              \
                                                    --callback  $_flag_callback                  \
                                                    --root_repo $_flag_root_repo                 \
+                                                   --order     $_flag_order                     \
                                                    $argv
-
-      # Post order
-      # echo "$_flag_indent Parent repo: $_flag_repo_path: label: $label, path_in_parent: $path_in_parent" >> /dev/stderr
-      pushd $_flag_repo_path/$path_in_parent
-      $_flag_callback --parent_repo $_flag_repo_path  \
-                      --submod_label      $label            \
-                      --submod_rel_path   $path_in_parent   \
-                      --branch          "$branch"          \
-                      --indent          "$_flag_indent"    \
-                      --root_repo        $_flag_root_repo  \
-                      $argv
-      popd
+      if test "$_flag_order" = "post-order"
+         # echo "$_flag_indent Parent repo: $_flag_repo_path: label: $label, path_in_parent: $path_in_parent" >> /dev/stderr
+         pushd $_flag_repo_path/$path_in_parent
+         $_flag_callback --parent_repo $_flag_repo_path       \
+                        --submod_label     $label            \
+                        --submod_rel_path  $path_in_parent   \
+                        --branch          "$branch"          \
+                        --indent          "$_flag_indent"    \
+                        --root_repo        $_flag_root_repo  \
+                        $argv
+         popd
+      end
    end
 end
 
 function impl_git::exec_for_each_submodule
-   argparse --ignore-unknown "repo_path=" "indent=" "callback=" -- $argv || return
-   impl_git::exec_for_each_submodule_dfs_helper --repo_path $_flag_repo_path  \
-                                                --indent "$_flag_indent     " \
-                                                --callback $_flag_callback    \
-                                                --root_repo $_flag_repo_path  \
+   argparse --ignore-unknown "repo_path=" "indent=" "callback=" "order=" -- $argv || return
+   impl_git::exec_for_each_submodule_dfs_helper --repo_path $_flag_repo_path    \
+                                                --indent   "$_flag_indent     " \
+                                                --callback  $_flag_callback     \
+                                                --root_repo $_flag_repo_path    \
+                                                --order     $_flag_order        \
                                                 $argv
    pushd $_flag_repo_path
    $_flag_callback --parent_repo $_flag_repo_path                              \
@@ -207,9 +233,10 @@ function impl_git::submodule_callback::print --argument-names parent_repo_path l
    impl_git::render_repo_branches_HEADs $argv
 end
 function impl_git::print_submodules
-   impl_git::exec_for_each_submodule --repo_path  (impl_git::get_root_repo_path)    \
-                                     --indent ""                                    \
-                                     --callback impl_git::submodule_callback::print
+   impl_git::exec_for_each_submodule --repo_path (impl_git::get_root_repo_path)      \
+                                     --indent    ""                                  \
+                                     --callback  impl_git::submodule_callback::print \
+                                     --order     "pre-order"
 end
 
 
@@ -219,7 +246,9 @@ end
 
 function impl_git::submodule_callback::status
    argparse --ignore-unknown "parent_repo=" "submod_label=" "submod_rel_path=" "branch=" "indent=" "root_repo=" -- $argv || return
-   set submod_path_rel_root (realpath --relative-to=$_flag_root_repo $_flag_parent_repo/$_flag_submod_rel_path)
+
+   set -l this_submod_path $_flag_parent_repo/$_flag_submod_rel_path
+   set submod_path_rel_root (realpath --relative-to=$_flag_root_repo $this_submod_path)
 
    if test "$submod_path_rel_root" = "."
       set submod_path_rel_root "" # Do not use ./ in front of modules
@@ -234,6 +263,12 @@ function impl_git::submodule_callback::status
                                                        --branch          $_flag_branch          \
                                                        --indent          $_flag_indent          \
                                                        --root_repo       $_flag_root_repo)
+
+   if not test -f "$this_submod_path/.git" -o -d "$this_submod_path/.git"
+      echo -e $header
+      echo -e $_flag_indent"   "$Red"The submodule is empty! "$Gray"(has it been blacklisted/skipped?)"$Color_Off
+      return
+   end
 
    # Support below the format of git status: https://git-scm.com/docs/git-status#_short_format
    git status --porcelain --ignore-submodules=dirty | awk_with_colours                                                  \
@@ -293,8 +328,9 @@ function impl_git::submodule_callback::status
 end
 function impl_git::status_for_each_submodule
    impl_git::exec_for_each_submodule --repo_path (impl_git::get_root_repo_path)       \
-                                     --indent ""                                      \
-                                     --callback impl_git::submodule_callback::status
+                                     --indent    ""                                   \
+                                     --callback  impl_git::submodule_callback::status \
+                                     --order     "pre-order"
 end
 
 
@@ -376,9 +412,10 @@ function impl_git::git_commit
    # Goes from leafs to root and for each submodule, adds its submodules that have new commits, and then
    # commits (whatever is in staging area: can be only the submodule and can only be new files or can be both)
 
-   impl_git::exec_for_each_submodule --repo_path (impl_git::get_root_repo_path)       \
-                                     --indent ""                                      \
-                                     --callback impl_git::submodule_callback::commmit \
+   impl_git::exec_for_each_submodule --repo_path (impl_git::get_root_repo_path)        \
+                                     --indent    ""                                    \
+                                     --callback  impl_git::submodule_callback::commmit \
+                                     --order     "post-order"                          \
                                      $argv
 end
 
@@ -407,9 +444,10 @@ function impl_git::checkout_branches
       set argv (impl_git::get_root_repo_path)
    end
    for submod_path in $argv
-      impl_git::exec_for_each_submodule --repo_path  $submod_path                                   \
-                                        --indent ""                                                 \
-                                        --callback impl_git::submodule_callback::checkout_branches
+      impl_git::exec_for_each_submodule --repo_path $submod_path                                    \
+                                        --indent    ""                                              \
+                                        --callback  impl_git::submodule_callback::checkout_branches \
+                                        --order     "pre-order"
    end
 end
 
@@ -463,6 +501,36 @@ end
 # ============================================================================================================
 # Git pull
 
+
+function impl_git::submodule_callback::checkout_and_pull --argument-names parent_repo_path label path branch indent
+   argparse --ignore-unknown "parent_repo=" "submod_label=" "submod_rel_path=" "branch=" "indent=" "root_repo=" -- $argv || return
+   set -l this_submod_path $_flag_parent_repo/$_flag_submod_rel_path
+   echo $this_submod_path
+   if test -z "$_flag_branch" # Root repo or branch is not specified => do nothing
+      echo "No branch (root or detached HEAD) => skipping"
+      return
+   end
+   # Handle the case if there is no such submodule (for example, it was blacklisted via git config submodule.XXX.update none)
+   if not test -f "$this_submod_path/.git" -o -d "$this_submod_path/.git"
+      echo "Empty submodule => skipping"
+      return
+   end
+
+   impl_git::MaybeRun git checkout $_flag_branch
+
+   set actual_HEAD (git rev-parse HEAD)
+   pushd $_flag_parent_repo
+   set -l expected_HEAD (git rev-parse :$_flag_submod_rel_path)
+   popd
+   if test "$actual_HEAD" = "$expected_HEAD"
+      echo "Actual branch's HEAD is same as expected => no need to pull"
+      return
+   end
+
+   impl_git::MaybeRun git pull
+end
+
+
 function impl_git::git_pull
    # Description:
    # Takes an optional list of **submodule** paths. If the list is empty, uses the root repo and performs
@@ -475,6 +543,18 @@ function impl_git::git_pull
    for submod_path in $argv
       pushd $submod_path
       git pull && git submodule sync --recursive && git submodule update --init --recursive #  --merge
+
+      # The command above is not enough. It only checks out the correct SHA. But it does not care about branches.
+      # So, we need to checkout to expected by parent repo (recorded in .gitmodule) branch.
+      # Unfortunately this is enough either, as no one merged remote-tracking branch to local branch, so,
+      # local branch can be behind (in other words, no one did git pull).
+      # Let's checkout the expected branch and make git pull (the SHA should be somewhere on that branch
+      # likely at the HEAD)
+      impl_git::exec_for_each_submodule --repo_path $submod_path     \
+         --indent    ""                                              \
+         --callback  impl_git::submodule_callback::checkout_and_pull \
+         --order     "pre-order"
+
       popd
    end
    # set -e fish_trace
@@ -507,6 +587,14 @@ function impl_git::git_log --argument-names submod_path
    pushd $submod_path
    git log $argv[2..]
    popd
+end
+
+
+# ============================================================================================================
+# Git push
+
+function impl_git::git_push
+   git submodule foreach "git symbolic-ref --short HEAD >/dev/null 2>&1 && git push || echo \"$Red   Ignoring submodule => no branch to push$Color_Off\"" && git push
 end
 
 
