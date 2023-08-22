@@ -590,11 +590,26 @@ function impl_git::git_log --argument-names submod_path
 end
 
 
+
 # ============================================================================================================
 # Git push
 
 function impl_git::git_push
-   git submodule foreach "git symbolic-ref --short HEAD >/dev/null 2>&1 && git push || echo \"$Red   Ignoring submodule => no branch to push$Color_Off\"" && git push
+   git submodule foreach fish -c "                                                                        \
+      set -l branch_name (git symbolic-ref --short HEAD 2>/dev/null);                                     \
+      if test -z \"\$branch_name\";                                                                       \
+         echo -e \"$Red   No branch to push =>$BRed ignoring submodule$Color_Off\";                       \
+         return;                                                                                          \
+      end;                                                                                                \
+      set -l local_sha (git rev-parse HEAD);                                                              \
+      set -l remote_sha (git rev-parse origin/\$branch_name);                                             \
+      if test \"\$local_sha\" != \"\$remote_sha\";                                                        \
+         echo -e \"$BrightGray   Local (\$local_sha) != remote (\$remote_sha) => pushing...$Color_Off\";  \
+         git push;                                                                                        \
+      else;                                                                                               \
+         echo -e \"$BrightGray   Local and remote branches are in sync => No need to push$Color_Off\";    \
+      end;                                                                                                \
+      " && git push
 end
 
 
