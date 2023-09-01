@@ -288,8 +288,8 @@ function impl_git::submodule_callback::status
             else                       staged["other:      ", the_rest];                                                \
          }                                                                                                              \
          if(second_char ~ /^[MTD]$/) {                                                                                  \
-            action = "modified";                                                                                        \
-            unstaged[action, the_rest];                                                                                 \
+            if(second_char == "D") unstaged["deleted:    ", the_rest];                                                  \
+            else                   unstaged["modified:   ", the_rest];                                                  \
          }                                                                                                              \
          if($1 == "??") {                                                                                               \
             untracked[the_rest];                                                                                        \
@@ -304,7 +304,7 @@ function impl_git::submodule_callback::status
              above_printed = 1;                                                                                         \
              for(status_file_pair in staged) {                                                                          \
                split(status_file_pair, status_file, SUBSEP);                                                            \
-               print indent "   " Green status_file[1] Gray submod_path_rel_root Green status_file[2] Color_Off;    \
+               print indent "   " Green status_file[1] Gray submod_path_rel_root Green status_file[2] Color_Off;        \
              }                                                                                                          \
          }                                                                                                              \
          if (length(unstaged)) {                                                                                        \
@@ -313,14 +313,14 @@ function impl_git::submodule_callback::status
             above_printed = 1;                                                                                          \
             for(status_file_pair in unstaged) {                                                                         \
                split(status_file_pair, status_file, SUBSEP);                                                            \
-               print indent "   " Red status_file[1]":   " Gray submod_path_rel_root BRed status_file[2] Color_Off; \
+               print indent "   " Red status_file[1] Gray submod_path_rel_root BRed status_file[2] Color_Off;           \
             }                                                                                                           \
          }                                                                                                              \
          if (length(untracked)) {                                                                                       \
             if(above_printed) printf "\n";                                                                              \
             print indent "Untracked files:";                                                                            \
             above_printed = 1;                                                                                          \
-            for(file in untracked) print indent "   " Gray submod_path_rel_root Red file Color_Off;                 \
+            for(file in untracked) print indent "   " Gray submod_path_rel_root Red file Color_Off;                     \
          }                                                                                                              \
          if(NR >= 1) print "\n";                                                                                        \
       }                                                                                                                 \
@@ -340,16 +340,23 @@ end
 # Git add
 
 function impl_git::add_file --argument-names full_path
-   set current_dir (realpath (dirname $full_path))
+   # remove leading ./ and prepend pwd:
+   set -l really_full_path_of_a_file (pwd)/(string replace -r "^\.\/" "" -- $full_path)
 
-   while not test -f "$current_dir/.git" -o -d "$current_dir/.git" -o "$current_dir" != "/"
+   # Find closest submodule directory by traversing up, until we find .git file or .git directory or /
+   set current_dir (realpath (dirname $full_path))
+   while not test -f "$current_dir/.git" -o -d "$current_dir/.git" -o "$current_dir" = "/"
       set current_dir (dirname $current_dir)
    end
    if test "$current_dir" = "/"
       echo "Failed to find git repo for $full_path" >> /dev/stderr
       return
    end
-   set relative_path (realpath --relative-to=$current_dir $full_path)
+
+   # Compute location of the given file within found submodule:
+   set relative_path (string replace -r "^$current_dir\/" "" $really_full_path_of_a_file)
+
+   # git add:
    pushd $current_dir
    impl_git::MaybeRun git add $relative_path
    # echo "File $relative_path added in submodule $current_dir" >> /dev/stderr
