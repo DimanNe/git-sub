@@ -548,6 +548,7 @@ function impl_git::git_pull
    end
    # set fish_trace 1
    for submod_path in $argv
+      set submod_path (realpath $submod_path)
       pushd $submod_path
       git pull && git submodule sync --recursive && git submodule update --init --recursive #  --merge
 
